@@ -12,7 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # 3. Streamlit Page Configuration MUST be the first Streamlit command
 st.set_page_config(
-    page_title="AI Software Requirement Gathering Assistant",
+    page_title="Software Requirement Gathering Agent",
     page_icon="📋",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -75,7 +75,7 @@ with col_title:
 
 with col_btn:
     st.write("")
-    if st.button("New Chat", help="Clear conversation and start over", use_container_width=True):
+    if st.button(" New Chat", help="Clear conversation and start over", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
