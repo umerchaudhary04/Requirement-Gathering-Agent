@@ -2,14 +2,14 @@ from crewai import Agent, Task, Crew, Process
 from tools.requirement_tools import SendEmailReportTool
 from config.settings import get_developer_email, get_llm, get_secret
 
-# Gemini 3 Model Series from Google AI Studio
 CANDIDATE_GEMINI_MODELS = [
-    get_secret("GEMINI_MODEL", "gemini/gemini-3.5-flash"),
-    "gemini/gemini-3.5-flash",
+    get_secret("GEMINI_MODEL", "gemini/gemini-3.5-flash-lite"),
     "gemini/gemini-3.5-flash-lite",
+    "gemini/gemini-3.5-flash",
+    "gemini/gemini-3.1-flash-lite",
     "gemini/gemini-3.8-flash",
-    "gemini/gemini-3.7-flash",
-    "gemini/gemini-3.6-flash"
+    "gemini/gemini-3.6-flash",
+    "gemini/gemini-3.7-flash"
 ]
 
 def create_requirement_agent(llm):
@@ -28,15 +28,11 @@ def create_requirement_agent(llm):
     )
 
 def run_task_with_fallback(task_description: str, expected_output: str, agent=None) -> str:
-    if agent:
-        try:
-            task = Task(description=task_description, expected_output=expected_output, agent=agent)
-            crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=False)
-            return str(crew.kickoff())
-        except Exception as e:
-            err_str = str(e)
-            if "404" not in err_str and "NOT_FOUND" not in err_str:
-                raise e
+    retryable_keywords = [
+        "503", "unavailable", "high demand", "overloaded", 
+        "429", "resource_exhausted", "quota", "rate limit",
+        "404", "not_found", "not supported"
+    ]
 
     last_error = None
     seen = set()
@@ -45,16 +41,19 @@ def run_task_with_fallback(task_description: str, expected_output: str, agent=No
     for model_name in models_to_try:
         try:
             llm = get_llm(model_name=model_name)
-            fallback_agent = create_requirement_agent(llm)
-            task = Task(description=task_description, expected_output=expected_output, agent=fallback_agent)
-            crew = Crew(agents=[fallback_agent], tasks=[task], process=Process.sequential, verbose=False)
+            active_agent = agent if agent else create_requirement_agent(llm)
+            
+            task = Task(description=task_description, expected_output=expected_output, agent=active_agent)
+            crew = Crew(agents=[active_agent], tasks=[task], process=Process.sequential, verbose=False)
             return str(crew.kickoff())
         except Exception as e:
-            err_str = str(e)
+            err_str = str(e).lower()
             last_error = e
-            if "404" in err_str or "NOT_FOUND" in err_str:
+            # Automatically retry next Gemini 3 model if busy (503) or rate-limited (429)
+            if any(keyword in err_str for keyword in retryable_keywords):
                 continue
             raise e
+
     raise last_error
 
 def elicit_requirements(*args, **kwargs) -> str:
