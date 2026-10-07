@@ -1,7 +1,8 @@
-import streamlit as st
-import os
-from config.settings import get_llm, get_developer_email, get_secret
-from agent.crew_manager import create_requirement_agent, elicit_requirements
+import sys
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Full width page & hide sidebar completely
 st.set_page_config(
