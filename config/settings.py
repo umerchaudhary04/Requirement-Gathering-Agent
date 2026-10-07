@@ -19,11 +19,13 @@ def get_developer_email() -> str:
     return get_secret("DEVELOPER_EMAIL", DEFAULT_DEVELOPER_EMAIL)
 
 def get_llm(model_name: str = DEFAULT_GEMINI_MODEL):
-    gemini_key = get_secret("GEMINI_API_KEY")
+    gemini_key = get_secret("GEMINI_API_KEY") or get_secret("GOOGLE_API_KEY")
     if not gemini_key:
         raise ValueError("GEMINI_API_KEY not found in Streamlit Secrets or .env.")
     
+    # Export to both environment variables used by Google SDKs and LiteLLM
     os.environ["GEMINI_API_KEY"] = gemini_key
+    os.environ["GOOGLE_API_KEY"] = gemini_key
 
     from crewai import LLM
     return LLM(model=model_name, api_key=gemini_key, temperature=0.3)
