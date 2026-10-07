@@ -5,8 +5,8 @@ load_dotenv()
 
 DEFAULT_DEVELOPER_EMAIL = "umerasgharkpr123@gmail.com"
 
-# Google AI Studio Gemini 3 Series
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini/gemini-3.5-flash")
+# Default to Gemini 3.5 Flash-Lite (High-throughput, no demand spikes)
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini/gemini-3.5-flash-lite")
 
 os.environ["LITELLM_LOG"] = "ERROR"
 
