@@ -4,23 +4,28 @@ from crewai import LLM
 
 load_dotenv()
 
+# Pre-configured developer email
 DEFAULT_DEVELOPER_EMAIL = "umerasgharkpr123@gmail.com"
 
+# Default Gemini model
+DEFAULT_GEMINI_MODEL = "gemini/gemini-1.5-flash"
+
 def get_developer_email() -> str:
-    """Returns the pre-configured developer destination email."""
     return os.getenv("DEVELOPER_EMAIL", DEFAULT_DEVELOPER_EMAIL)
 
-def get_llm(model_provider: str = "groq", api_key: str = None) -> LLM:
-    """Configures free LLMs (Groq Llama 3.3 or Google Gemini)."""
-    if model_provider == "groq":
-        groq_key = api_key or os.getenv("GROQ_API_KEY")
-        if not groq_key:
-            raise ValueError("Groq API Key is required. Please enter it in the sidebar.")
-        return LLM(model="groq/llama-3.3-70b-versatile", api_key=groq_key, temperature=0.3)
-    elif model_provider == "gemini":
-        gemini_key = api_key or os.getenv("GEMINI_API_KEY")
-        if not gemini_key:
-            raise ValueError("Gemini API Key is required. Please enter it in the sidebar.")
-        return LLM(model="gemini/gemini-1.5-flash", api_key=gemini_key, temperature=0.3)
-    else:
-        raise ValueError(f"Unsupported model provider: {model_provider}")
+def get_llm(api_key: str = None, model_name: str = DEFAULT_GEMINI_MODEL) -> LLM:
+    """
+    Returns a configured CrewAI LLM instance using Google Gemini.
+    Free API key: https://aistudio.google.com
+    """
+    gemini_key = api_key or os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        raise ValueError("Google Gemini API Key is required. Please provide it in the sidebar or in your .env file.")
+    
+    os.environ["GEMINI_API_KEY"] = gemini_key
+
+    return LLM(
+        model=model_name,
+        api_key=gemini_key,
+        temperature=0.3
+    )
