@@ -1,56 +1,37 @@
 from crewai import Agent, Task, Crew, Process
-from tools.requirement_tools import DomainChecklistTool, SRSStructureTool, SendEmailReportTool
-from config.settings import get_developer_email, get_llm
+from tools.requirement_tools import SendEmailReportTool
+from config.settings import get_developer_email, get_llm, get_secret
 
+# Gemini 3 Model Series from Google AI Studio
 CANDIDATE_GEMINI_MODELS = [
-    "gemini/gemini-1.5-flash-latest",
-    "gemini/gemini-2.0-flash",
+    get_secret("GEMINI_MODEL", "gemini/gemini-3.5-flash"),
     "gemini/gemini-3.5-flash",
-    "gemini/gemini-1.5-pro-latest"
+    "gemini/gemini-3.5-flash-lite",
+    "gemini/gemini-3.8-flash",
+    "gemini/gemini-3.7-flash",
+    "gemini/gemini-3.6-flash"
 ]
 
 def create_requirement_agent(llm):
-    """
-    Creates the single CrewAI Requirement Gathering Agent equipped with domain checklist,
-    SRS structure outline, and automatic email dispatch tools.
-    """
-    checklist_tool = DomainChecklistTool()
-    srs_tool = SRSStructureTool()
     email_tool = SendEmailReportTool()
     target_email = get_developer_email()
 
-    agent = Agent(
+    return Agent(
         role="Lead Software Requirements Architect & Business Analyst",
-        goal=(
-            "Engage users in English to discover their Product Name, core User Story, and technical "
-            "requirements through focused dialogue. Proactively uncover hidden edge cases, and THE MOMENT "
-            f"all requirements are sufficiently gathered, AUTOMATICALLY compile and email the final User Story + SRS "
-            f"report directly to the development team at {target_email} without requiring manual button clicks."
-        ),
-        backstory=(
-            f"You are an elite Lead Software Architect. You communicate strictly in English. "
-            f"You ask 1-2 focused questions at a time. You strictly do NOT quote prices or estimate budgets. "
-            f"CRITICAL INSTRUCTION: Once you have gathered sufficient requirements (or if the user indicates they have "
-            f"shared all details), you MUST IMMEDIATELY and AUTOMATICALLY use your 'Direct Email Report Dispatcher' tool "
-            f"to email the complete User Story & SRS document to {target_email}. Then notify the user in the chat that the "
-            f"document has been automatically dispatched."
-        ),
-        tools=[checklist_tool, srs_tool, email_tool],
+        goal=f"Quickly engage the user to discover their Product Name, core User Story, and technical requirements. The moment requirements are complete, automatically email the final User Story + SRS report directly to {target_email}.",
+        backstory=f"You are an elite Senior Software Architect. You comprehend user input in English, Urdu, or Roman Urdu, and ALWAYS respond immediately in clear, professional English. You ask 1-2 sharp questions at a time and strictly do NOT quote prices. For regular questions, respond directly without calling any tools. ONLY call the email tool when all requirements are fully gathered.",
+        tools=[email_tool],
         llm=llm,
-        verbose=True,
+        max_iter=2,
+        verbose=False,
         memory=False
     )
-    return agent
 
 def run_task_with_fallback(task_description: str, expected_output: str, agent=None) -> str:
-    """
-    Executes a CrewAI task. If no pre-initialized agent is provided or if a 404 occurs,
-    automatically tries candidate Gemini model aliases.
-    """
     if agent:
         try:
             task = Task(description=task_description, expected_output=expected_output, agent=agent)
-            crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=True)
+            crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=False)
             return str(crew.kickoff())
         except Exception as e:
             err_str = str(e)
@@ -58,13 +39,15 @@ def run_task_with_fallback(task_description: str, expected_output: str, agent=No
                 raise e
 
     last_error = None
-    for model_name in CANDIDATE_GEMINI_MODELS:
+    seen = set()
+    models_to_try = [m for m in CANDIDATE_GEMINI_MODELS if m and not (m in seen or seen.add(m))]
+
+    for model_name in models_to_try:
         try:
             llm = get_llm(model_name=model_name)
             fallback_agent = create_requirement_agent(llm)
-            
             task = Task(description=task_description, expected_output=expected_output, agent=fallback_agent)
-            crew = Crew(agents=[fallback_agent], tasks=[task], process=Process.sequential, verbose=True)
+            crew = Crew(agents=[fallback_agent], tasks=[task], process=Process.sequential, verbose=False)
             return str(crew.kickoff())
         except Exception as e:
             err_str = str(e)
@@ -75,68 +58,40 @@ def run_task_with_fallback(task_description: str, expected_output: str, agent=No
     raise last_error
 
 def elicit_requirements(*args, **kwargs) -> str:
-    """
-    Flexible signature accepting:
-    - elicit_requirements(conversation_history, latest_user_message)
-    - elicit_requirements(agent, conversation_history, latest_user_message)
-    - elicit_requirements(agent=agent, conversation_history=..., latest_user_message=...)
-    """
     agent = kwargs.get("agent", None)
     conversation_history = kwargs.get("conversation_history", None)
     latest_user_message = kwargs.get("latest_user_message", None)
 
     if args:
-        if len(args) == 3:
-            agent, conversation_history, latest_user_message = args
-        elif len(args) == 2:
-            conversation_history, latest_user_message = args
-        elif len(args) == 1 and conversation_history is None:
-            conversation_history = args[0]
+        if len(args) == 3: agent, conversation_history, latest_user_message = args
+        elif len(args) == 2: conversation_history, latest_user_message = args
+        elif len(args) == 1 and conversation_history is None: conversation_history = args[0]
 
     conversation_history = conversation_history or []
     latest_user_message = latest_user_message or ""
 
     target_email = get_developer_email()
-    history_text = "\n".join([
-        f"{msg['role'].upper()}: {msg['content']}" 
-        for msg in conversation_history
-    ])
+    history_text = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in conversation_history])
 
     task_description = f"""
-Analyze the ongoing software requirement gathering dialogue:
-
-### Conversation History:
+### Ongoing Dialogue History:
 {history_text}
 
 ### Latest User Message:
 {latest_user_message}
 
-### Destination Developer Email:
+### Destination Email:
 {target_email}
 
-### Critical Workflow & Rules:
-1. **Language**: Communicate exclusively in clear, professional English.
-2. **Budget & Cost Guardrail**:
-   - If the user asks about price, cost, budget, or quotes:
-     Politely clarify that your sole purpose is strictly software requirement elicitation.
-     Explain that cost and timeline estimations will be accurately determined by the engineering team after reviewing the final SRS document.
-3. **Step 1: Product Name & User Story**:
-   - If the session just began, ensure you have the Product Name and the initial User Story (who is the primary user and what core problem does this solve).
-4. **Step 2: Probing Missing Requirements**:
-   - Use the 'Domain Checklist Inspector' tool to check which critical areas are still unanswered (e.g. user roles/permissions, functional flows, payments, third-party integrations, scalability, edge cases).
-   - If key requirements are still missing, ask **only 1 or 2 targeted, concise questions**. Do NOT overwhelm the user with long lists.
-5. **Step 3: AUTOMATIC EMAIL DISPATCH (When Requirements Are Complete)**:
-   - Check if requirements are sufficiently gathered (e.g., product vision, user roles, core modules, key technical flows/integrations, and edge cases are identified, OR the user indicates they have answered everything / says 'that is all' / 'ready to finish').
-   - **THE MOMENT REQUIREMENTS ARE COMPLETE**:
-     a. Compile the complete document formatted in Markdown containing:
-        - **Part 1: The User Story** (Narrative, Personas, Agile User Stories, Acceptance Criteria)
-        - **Part 2: Software Requirements Specification (SRS)** (Executive Summary, RBAC, Functional Modules & Edge Cases, Non-Functional Requirements, Recommended Architecture & Tech Stack, Third-Party APIs)
-     b. **CALL THE 'Direct Email Report Dispatcher' TOOL IMMEDIATELY** to send the report to {target_email} with subject: '[Software Requirements & User Story Report] Final Specifications'.
-     c. In your chat response to the user, announce that all requirements have been successfully gathered and that the full User Story & SRS Report has been **automatically emailed to our development team at {target_email}**.
+### Instructions:
+1. Comprehend user input in English, Urdu, or Roman Urdu (e.g. food delivery app for 'White Chillies') and respond immediately in professional, friendly English.
+2. Budget Guardrail: If user asks about cost/pricing, clarify that your mandate is strictly requirement gathering; pricing will be estimated by developers from the final SRS.
+3. Fast Elicitation: Acknowledge their restaurant app idea and ask 1 or 2 targeted, high-impact questions (e.g., dedicated delivery riders vs third-party couriers, payment methods like Cash on Delivery or card). Do NOT call any tool for routine chat.
+4. Automatic Email Dispatch: ONLY when all requirements are gathered or user says 'finalize', compile the full User Story + SRS report, call 'Direct Email Report Dispatcher' to send to {target_email}, and notify the user in chat.
 """
 
     return run_task_with_fallback(
         task_description=task_description,
-        expected_output="Either 1-2 targeted follow-up questions, OR automatic email dispatch of the completed SRS and user notification.",
+        expected_output="1-2 targeted requirement questions in English, OR final email dispatch notification.",
         agent=agent
     )
