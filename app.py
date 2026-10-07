@@ -1,10 +1,16 @@
 import sys
+import os
 from pathlib import Path
+
+# 1. Immediately import streamlit
+import streamlit as st
+
+# 2. Add project root to sys.path so submodules load seamlessly
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Full width page & hide sidebar completely
+# 3. Streamlit Page Configuration MUST be the first Streamlit command
 st.set_page_config(
     page_title="Software Requirement Gathering Agent",
     page_icon="📋",
@@ -12,9 +18,10 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# CSS to ensure sidebar and toggle controls are completely hidden
+# 4. Custom Styling: Hide sidebar completely, clean full-width chat
 st.markdown("""
 <style>
+    /* Hide Streamlit Sidebar completely */
     [data-testid="stSidebar"] { display: none; }
     [data-testid="collapsedControl"] { display: none; }
     .main .block-container {
@@ -43,11 +50,21 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# 5. Safe configuration and secrets loading
+try:
+    from config.settings import get_llm, get_developer_email, get_secret
+    DEVELOPER_EMAIL = get_developer_email()
+except Exception as e:
+    st.error(f"Configuration load error: {str(e)}")
+    DEVELOPER_EMAIL = "umerasgharkpr123@gmail.com"
+
+# Initialize Session State
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Header with clean reset button
+# Top Header Layout (Title + Clean Reset Button)
 col_title, col_btn = st.columns([5, 1])
+
 with col_title:
     st.title("Software Requirement Gathering Agent")
     st.caption("Powered by Google Gemini & CrewAI | Automated Discovery & Direct Developer Handoff")
@@ -60,7 +77,7 @@ with col_btn:
 
 st.divider()
 
-# Welcome Card
+# Welcome Banner for new chat sessions
 if not st.session_state.messages:
     st.markdown("""
     <div class="welcome-card">
@@ -78,29 +95,40 @@ if not st.session_state.messages:
     """, unsafe_allow_html=True)
 
 # Secret Verification
-gemini_key = get_secret("GEMINI_API_KEY")
+gemini_key = os.getenv("GEMINI_API_KEY")
 if not gemini_key:
-    st.warning(" **System Configuration Required**: Please set `GEMINI_API_KEY` in Streamlit Cloud Secrets to enable the assistant.")
+    try:
+        from config.settings import get_secret
+        gemini_key = get_secret("GEMINI_API_KEY")
+    except Exception:
+        pass
+
+if not gemini_key:
+    st.warning(" **System Configuration Required**: Please set `GEMINI_API_KEY` in Streamlit Cloud Secrets (Advanced Settings > Secrets).")
 
 # Display Chat History
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Chat Input & Automated Agent Execution
+# User Chat Input
 user_input = st.chat_input("Enter your product name, user story, or reply to questions...")
 
 if user_input:
     if not gemini_key:
         st.error("Cannot proceed: `GEMINI_API_KEY` is not configured in Streamlit Secrets.")
     else:
+        # 1. Add user message
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
 
+        # 2. Run CrewAI Agent
         with st.chat_message("assistant"):
             with st.spinner("Analyzing requirements & user story gaps..."):
                 try:
+                    from agent.crew_manager import create_requirement_agent, elicit_requirements
+                    
                     llm = get_llm()
                     agent = create_requirement_agent(llm)
                     
@@ -113,6 +141,6 @@ if user_input:
                     st.markdown(response_text)
                     st.session_state.messages.append({"role": "assistant", "content": response_text})
                 except Exception as e:
-                    error_msg = f"An error occurred: {str(e)}"
+                    error_msg = f" An error occurred: {str(e)}"
                     st.error(error_msg)
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
