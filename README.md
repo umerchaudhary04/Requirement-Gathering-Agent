@@ -54,6 +54,7 @@ requirement-gathering-agent/
 
 ```
 ### How It Works
+```
 graph TD
     A[User Enters Product Name & User Story] --> B[CrewAI Senior Architect Agent]
     B --> C[Domain Checklist Tool]
@@ -66,6 +67,7 @@ graph TD
     F --> G[Direct Email Report Dispatcher Tool]
     G -->|Automated SMTP Dispatch| H[Email sent to umerasgharkpr123@gmail.com]
     H --> I[Notify User in Chat Interface]
+```
 
 ### Deployment on Streamlit Community Cloud (Free)
 1. Push your code to GitHub
