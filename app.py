@@ -12,13 +12,25 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # 3. Streamlit Page Configuration MUST be the first Streamlit command
 st.set_page_config(
-    page_title="Software Requirement Gathering Agent",
+    page_title="AI Software Requirement Gathering Assistant",
     page_icon="📋",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# 4. Custom Styling: Hide sidebar completely, clean full-width chat
+# 4. Helper to safely retrieve secrets from Streamlit Cloud Secrets or .env
+def get_secret(key: str, default: str = "") -> str:
+    try:
+        if hasattr(st, "secrets") and key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return os.getenv(key, default)
+
+# 5. Developer email resolution
+DEVELOPER_EMAIL = get_secret("DEVELOPER_EMAIL", "umerasgharkpr123@gmail.com")
+
+# 6. Custom Styling: Hide sidebar completely, clean full-width chat
 st.markdown("""
 <style>
     /* Hide Streamlit Sidebar completely */
@@ -49,14 +61,6 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-
-# 5. Safe configuration and secrets loading
-try:
-    from config.settings import get_llm, get_developer_email, get_secret
-    DEVELOPER_EMAIL = get_developer_email()
-except Exception as e:
-    st.error(f"Configuration load error: {str(e)}")
-    DEVELOPER_EMAIL = "umerasgharkpr123@gmail.com"
 
 # Initialize Session State
 if "messages" not in st.session_state:
@@ -95,13 +99,7 @@ if not st.session_state.messages:
     """, unsafe_allow_html=True)
 
 # Secret Verification
-gemini_key = os.getenv("GEMINI_API_KEY")
-if not gemini_key:
-    try:
-        from config.settings import get_secret
-        gemini_key = get_secret("GEMINI_API_KEY")
-    except Exception:
-        pass
+gemini_key = get_secret("GEMINI_API_KEY")
 
 if not gemini_key:
     st.warning(" **System Configuration Required**: Please set `GEMINI_API_KEY` in Streamlit Cloud Secrets (Advanced Settings > Secrets).")
@@ -127,6 +125,7 @@ if user_input:
         with st.chat_message("assistant"):
             with st.spinner("Analyzing requirements & user story gaps..."):
                 try:
+                    from config.settings import get_llm
                     from agent.crew_manager import create_requirement_agent, elicit_requirements
                     
                     llm = get_llm()
