@@ -3,57 +3,58 @@ from tools.requirement_tools import DomainChecklistTool, SRSStructureTool, SendE
 from config.settings import get_developer_email
 
 def create_requirement_agent(llm):
+    checklist_tool = DomainChecklistTool()
+    srs_tool = SRSStructureTool()
+    email_tool = SendEmailReportTool()
+    target_email = get_developer_email()
+
     return Agent(
         role="Lead Software Requirements Architect & Business Analyst",
-        goal="Discover Product Names, User Stories, and exhaustive technical requirements through dialogue, strictly avoiding budget estimation, and dispatching the final SRS directly to developers.",
-        backstory="You are a seasoned Senior Software Architect. You communicate strictly in English. You ask only 1-2 focused questions at a time. You do not quote prices or estimate budgets; your sole mandate is technical requirement elicitation.",
-        tools=[DomainChecklistTool(), SRSStructureTool(), SendEmailReportTool()],
+        goal=(
+            "Engage users in English to discover their Product Name, core User Story, and technical "
+            "requirements through focused dialogue. Proactively uncover hidden edge cases, and THE MOMENT "
+            f"all requirements are sufficiently gathered, AUTOMATICALLY compile and email the final User Story + SRS "
+            f"report directly to the development team at {target_email} without requiring manual button clicks."
+        ),
+        backstory=(
+            f"You are an elite Lead Software Architect. You communicate strictly in English. "
+            f"You ask 1-2 focused questions at a time. You strictly do NOT quote prices or estimate budgets. "
+            f"CRITICAL INSTRUCTION: Once you have gathered sufficient requirements (or if the user indicates they have "
+            f"shared all details), you MUST IMMEDIATELY and AUTOMATICALLY use your 'Direct Email Report Dispatcher' tool "
+            f"to email the complete User Story & SRS document to {target_email}. Then notify the user in the chat that the "
+            f"document has been automatically dispatched."
+        ),
+        tools=[checklist_tool, srs_tool, email_tool],
         llm=llm,
-        verbose=True
+        verbose=True,
+        memory=False
     )
 
 def elicit_requirements(agent, conversation_history: list, latest_user_message: str) -> str:
+    target_email = get_developer_email()
     history_text = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in conversation_history])
 
     task = Task(
         description=f"""
-Analyze the ongoing requirement elicitation dialogue:
+Analyze the requirement gathering dialogue:
 History:
 {history_text}
-Latest User Input:
+Latest Message:
 {latest_user_message}
 
-Guidelines:
-1. Language: Communicate exclusively in clear, professional English.
-2. Budget Guardrail: If the user asks about price, cost, or budget, politely clarify that your sole purpose is requirement gathering and developers will estimate cost from the final SRS.
-3. User Story: Ensure you understand the Product Name and initial User Story (who is the user and what problem is solved).
-4. Probing: Ask 1-2 targeted questions at a time based on the Domain Checklist.
-5. If requirements are sufficiently clear, summarize and invite the user to click 'Email SRS'.
+CRITICAL RULES:
+1. Budget Guardrail: If user asks about cost/pricing, clarify that your mandate is strictly requirement gathering, and developers will quote cost after reviewing the SRS.
+2. Step 1: Ensure Product Name & User Story are identified.
+3. Probing: Ask 1-2 targeted questions at a time using 'Domain Checklist Inspector'.
+4. AUTOMATIC EMAIL TRIGGER:
+   - When requirements are complete (User Story, core roles, modules, edge cases covered, OR user says they are done):
+     a. Compile the complete document (Part 1: The User Story, Part 2: SRS Report).
+     b. CALL 'Direct Email Report Dispatcher' tool to email the report to {target_email}.
+     c. Announce in your chat reply that all requirements are gathered and the report has been AUTOMATICALLY emailed to {target_email}.
 """,
-        expected_output="1-2 targeted follow-up requirement questions in English.",
+        expected_output="Either 1-2 follow-up questions, OR automatic email dispatch of the completed SRS and user notification.",
         agent=agent
     )
+
     crew = Crew(agents=[agent], tasks=[task], process=Process.sequential)
     return str(crew.kickoff())
-
-def generate_and_email_report(agent, conversation_history: list, project_name: str, recipient_email: str = None) -> dict:
-    target_email = recipient_email or get_developer_email()
-    history_text = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in conversation_history])
-
-    task = Task(
-        description=f"""
-1. Compile a comprehensive two-part document in English for '{project_name}':
-   - Part 1: The User Story (Narrative, personas, Agile user stories, acceptance criteria).
-   - Part 2: Software Requirements Specification (SRS) (Scope, RBAC, modules, edge cases, NFRs, architecture & tech stack, integrations).
-2. Use the 'Direct Email Report Dispatcher' tool to email this report directly to: {target_email}.
-3. Return the complete Markdown report text along with a confirmation that it was sent to {target_email}.
-
-Conversation History:
-{history_text}
-""",
-        expected_output="Compiled User Story + SRS report and confirmation of email dispatch.",
-        agent=agent
-    )
-    crew = Crew(agents=[agent], tasks=[task], process=Process.sequential)
-    result = str(crew.kickoff())
-    return {"report": result, "recipient": target_email}
