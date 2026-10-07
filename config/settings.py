@@ -4,8 +4,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEFAULT_DEVELOPER_EMAIL = "umerasgharkpr123@gmail.com"
-# v1beta endpoint canonical alias
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini/gemini-1.5-flash-latest")
+
+# Google AI Studio Gemini 3 Series
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini/gemini-3.5-flash")
+
+os.environ["LITELLM_LOG"] = "ERROR"
 
 def get_secret(key: str, default: str = "") -> str:
     try:
