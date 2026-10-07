@@ -5,7 +5,7 @@ from config.settings import get_developer_email, get_llm
 CANDIDATE_GEMINI_MODELS = [
     "gemini/gemini-1.5-flash-latest",
     "gemini/gemini-2.0-flash",
-    "gemini/gemini-1.5-flash",
+    "gemini/gemini-3.5-flash",
     "gemini/gemini-1.5-pro-latest"
 ]
 
